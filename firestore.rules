@@ -22,6 +22,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /settings/{settingId} {
+      allow read: if settingId == "config";
+      allow write: if false;
+    }
+
     match /users/{userId} {
       allow create, update: if isOwner(userId) &&
         request.resource.data.uid == request.auth.uid;

@@ -24,6 +24,5 @@ export const emailConfig = {
 // Admin Configuration
 export const adminConfig = {
   emails: ["chukwumachidozie18@gmail.com"],
-  accountNumber: "7071048081",
-  whatsappNumber: "2347120004769"
+  accountNumber: "7071048081"
 };
