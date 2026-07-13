@@ -906,6 +906,96 @@ window.rejectListing = async (listingId) => {
   }
 };
 
+function populateAdminSettingsForm() {
+  const diamondRateInput = document.getElementById("setting-diamond-rate");
+  const supportWhatsappInput = document.getElementById("setting-support-whatsapp");
+  const topupEnabledInput = document.getElementById("setting-topup-enabled");
+  const marketplaceEnabledInput = document.getElementById("setting-marketplace-enabled");
+  const maintenanceModeInput = document.getElementById("setting-maintenance-mode");
+
+  if (diamondRateInput) {
+    diamondRateInput.value = siteSettings.diamondRate;
+  }
+
+  if (supportWhatsappInput) {
+    supportWhatsappInput.value = siteSettings.supportWhatsapp;
+  }
+
+  if (topupEnabledInput) {
+    topupEnabledInput.checked = siteSettings.topupEnabled;
+  }
+
+  if (marketplaceEnabledInput) {
+    marketplaceEnabledInput.checked = siteSettings.marketplaceEnabled;
+  }
+
+  if (maintenanceModeInput) {
+    maintenanceModeInput.checked = siteSettings.maintenanceMode;
+  }
+}
+
+window.saveAdminSiteSettings = async () => {
+  await ensureSiteSettingsLoaded();
+
+  const user = auth.currentUser;
+
+  if (!user || !adminConfig.emails.includes(user.email.toLowerCase())) {
+    alert("Admin access required.");
+    return;
+  }
+
+  const diamondRate = Number(
+    document.getElementById("setting-diamond-rate")?.value
+  );
+  const supportWhatsapp = document
+    .getElementById("setting-support-whatsapp")
+    ?.value
+    .trim();
+
+  if (!Number.isFinite(diamondRate) || diamondRate <= 0) {
+    alert("Diamond rate must be a positive number.");
+    return;
+  }
+
+  if (!supportWhatsapp) {
+    alert("Support WhatsApp number is required.");
+    return;
+  }
+
+  const nextSettings = {
+    diamondRate,
+    supportWhatsapp,
+    topupEnabled: Boolean(
+      document.getElementById("setting-topup-enabled")?.checked
+    ),
+    marketplaceEnabled: Boolean(
+      document.getElementById("setting-marketplace-enabled")?.checked
+    ),
+    maintenanceMode: Boolean(
+      document.getElementById("setting-maintenance-mode")?.checked
+    ),
+    updatedAt: serverTimestamp(),
+    updatedBy: user.uid
+  };
+
+  try {
+    showToast("Saving site settings...");
+
+    await setDoc(doc(db, "settings", "config"), nextSettings, { merge: true });
+    await loadSiteSettings();
+    populateAdminSettingsForm();
+    showToast("Site settings saved ✅");
+  } catch (err) {
+    console.error("SAVE SITE SETTINGS ERROR:", err);
+    alert(
+      "Could not save site settings:\n\n" +
+      err.code +
+      "\n\n" +
+      err.message
+    );
+  }
+};
+
 async function loadAdminOrders() {
   const ordersList = document.getElementById("orders-list");
   const searchInput = document.getElementById("search-orders");
@@ -1162,6 +1252,8 @@ onAuthStateChanged(auth, async (user) => {
   const adminDashboard = document.getElementById("admin-dashboard");
   const adminDenied = document.getElementById("admin-denied");
   const adminLink = document.getElementById("admin-link");
+  const adminSettingsSection = document.getElementById("admin-settings-section");
+  const adminListingsSection = document.getElementById("admin-listings-section");
 
   const ordersLink = document.getElementById("orders-link");
   const historySection = document.getElementById("history-section");
@@ -1245,12 +1337,21 @@ onAuthStateChanged(auth, async (user) => {
       adminDashboard.classList.toggle("hidden", !isAdmin);
     }
 
+    if (adminSettingsSection) {
+      adminSettingsSection.classList.toggle("hidden", !isAdmin);
+    }
+
+    if (adminListingsSection) {
+      adminListingsSection.classList.toggle("hidden", !isAdmin);
+    }
+
     if (adminDenied) {
       adminDenied.classList.toggle("hidden", isAdmin);
     }
 
     if (isAdmin) {
       showToast("Admin dashboard unlocked ✅");
+      populateAdminSettingsForm();
       loadAdminOrders();
       loadAdminListings();
     }
@@ -1304,6 +1405,14 @@ onAuthStateChanged(auth, async (user) => {
 
     if (adminDashboard) {
       adminDashboard.classList.add("hidden");
+    }
+
+    if (adminSettingsSection) {
+      adminSettingsSection.classList.add("hidden");
+    }
+
+    if (adminListingsSection) {
+      adminListingsSection.classList.add("hidden");
     }
 
     if (adminDenied) {

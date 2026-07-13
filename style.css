@@ -855,6 +855,38 @@ input:focus{
   text-align:center;
 }
 
+.settings-form{
+  max-width:680px;
+  margin:0 auto;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:25px;
+  padding:30px;
+}
+
+.settings-form label{
+  display:block;
+  color:var(--cyan);
+  margin:14px 0 6px;
+  font-weight:600;
+}
+
+.settings-toggle{
+  display:flex !important;
+  align-items:center;
+  gap:12px;
+  color:#fff !important;
+}
+
+.settings-toggle input{
+  width:auto;
+  margin:0;
+}
+
+.danger-toggle span{
+  color:var(--pink);
+}
+
 /* PAYMENT PROOF */
 .proof-label{
   display:block;
