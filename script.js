@@ -69,14 +69,6 @@ let currentOrder = {
 const DEFAULT_LISTING_IMAGE =
   "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1200&auto=format&fit=crop";
 
-let siteSettings = {
-  diamondRate: 15,
-  topupEnabled: true,
-  marketplaceEnabled: true,
-  maintenanceMode: false,
-  supportWhatsapp: "2347120004769"
-};
-
 // Store all listings for filtering
 let allListings = [];
 
