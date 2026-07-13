@@ -72,10 +72,204 @@ const DEFAULT_LISTING_IMAGE =
 // Store all listings for filtering
 let allListings = [];
 
+function normalizeBoolean(value, fallback) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function normalizePositiveNumber(value, fallback) {
+  const numericValue = Number(value);
+
+  return Number.isFinite(numericValue) && numericValue > 0
+    ? numericValue
+    : fallback;
+}
+
+function normalizeString(value, fallback) {
+  return typeof value === "string" && value.trim()
+    ? value.trim()
+    : fallback;
+}
+
+async function loadSiteSettings() {
+  try {
+    const settingsSnap = await getDoc(doc(db, "settings", "config"));
+
+    if (settingsSnap.exists()) {
+      const data = settingsSnap.data();
+
+      siteSettings = {
+        ...siteSettings,
+        diamondRate: normalizePositiveNumber(
+          data.diamondRate,
+          siteSettings.diamondRate
+        ),
+        topupEnabled: normalizeBoolean(
+          data.topupEnabled,
+          siteSettings.topupEnabled
+        ),
+        marketplaceEnabled: normalizeBoolean(
+          data.marketplaceEnabled,
+          siteSettings.marketplaceEnabled
+        ),
+        maintenanceMode: normalizeBoolean(
+          data.maintenanceMode,
+          siteSettings.maintenanceMode
+        ),
+        supportWhatsapp: normalizeString(
+          data.supportWhatsapp,
+          siteSettings.supportWhatsapp
+        )
+      };
+    }
+
+    console.log("SITE SETTINGS LOADED:", siteSettings);
+  } catch (err) {
+    console.error("LOAD SITE SETTINGS ERROR:", err);
+  }
+
+  applySiteSettings();
+  return siteSettings;
+}
+
+const siteSettingsReady = loadSiteSettings();
+
 function setText(element, value) {
   if (element) {
     element.textContent = value;
   }
+}
+
+function isTopupAvailable() {
+  return !siteSettings.maintenanceMode && siteSettings.topupEnabled;
+}
+
+function isMarketplaceAvailable() {
+  return !siteSettings.maintenanceMode && siteSettings.marketplaceEnabled;
+}
+
+async function ensureSiteSettingsLoaded() {
+  try {
+    await siteSettingsReady;
+  } catch (err) {
+    console.error("SITE SETTINGS STARTUP ERROR:", err);
+  }
+}
+
+function upsertStatusMessage(id, message, anchorElement) {
+  if (!anchorElement) return;
+
+  let statusBox = document.getElementById(id);
+
+  if (!statusBox) {
+    statusBox = document.createElement("div");
+    statusBox.id = id;
+    statusBox.className = "login-required-box settings-status-box";
+    anchorElement.before(statusBox);
+  }
+
+  statusBox.textContent = message;
+  statusBox.classList.remove("hidden");
+}
+
+function hideStatusMessage(id) {
+  const statusBox = document.getElementById(id);
+
+  if (statusBox) {
+    statusBox.classList.add("hidden");
+  }
+}
+
+function applySiteSettings() {
+  const maintenanceBannerId = "maintenance-banner";
+  let maintenanceBanner = document.getElementById(maintenanceBannerId);
+
+  if (siteSettings.maintenanceMode) {
+    if (!maintenanceBanner) {
+      maintenanceBanner = document.createElement("div");
+      maintenanceBanner.id = maintenanceBannerId;
+      maintenanceBanner.className = "maintenance-banner";
+      document.body.prepend(maintenanceBanner);
+    }
+
+    maintenanceBanner.textContent =
+      "Savage Store is currently in maintenance mode. Orders, purchases, and seller submissions are disabled.";
+  } else if (maintenanceBanner) {
+    maintenanceBanner.remove();
+  }
+
+  const diamondGrid = document.getElementById("diamond-grid");
+  const customDiamondBox = document.querySelector(".custom-diamond-box");
+  const topupLoginBox = document.getElementById("login-required-box");
+
+  if (!isTopupAvailable()) {
+    if (diamondGrid) {
+      diamondGrid.classList.add("hidden");
+    }
+
+    if (customDiamondBox) {
+      customDiamondBox.classList.add("hidden");
+    }
+
+    if (topupLoginBox) {
+      topupLoginBox.classList.add("hidden");
+    }
+
+    upsertStatusMessage(
+      "topup-settings-status",
+      siteSettings.maintenanceMode
+        ? "Diamond Top-up is unavailable during maintenance."
+        : "Diamond Top-up is temporarily unavailable.",
+      diamondGrid || customDiamondBox
+    );
+  } else {
+    hideStatusMessage("topup-settings-status");
+
+    if (customDiamondBox) {
+      customDiamondBox.classList.remove("hidden");
+    }
+  }
+
+  updateDiamondPackagePrices();
+
+  const marketplaceGrid = document.getElementById("marketplace-grid");
+  const featuredSection = document.getElementById("featured-section");
+  const marketplaceControls = document.getElementById("marketplace-controls");
+  const marketplaceLoginBox = document.getElementById("marketplace-login-box");
+
+  if (!isMarketplaceAvailable()) {
+    [marketplaceGrid, featuredSection, marketplaceControls, marketplaceLoginBox].forEach((element) => {
+      if (element) {
+        element.classList.add("hidden");
+      }
+    });
+
+    upsertStatusMessage(
+      "marketplace-settings-status",
+      siteSettings.maintenanceMode
+        ? "Marketplace is unavailable during maintenance."
+        : "Marketplace is temporarily unavailable.",
+      marketplaceGrid || featuredSection || marketplaceControls
+    );
+  } else {
+    hideStatusMessage("marketplace-settings-status");
+  }
+}
+
+function calculateDiamondPrice(amount) {
+  return Math.round(amount * Number(siteSettings.diamondRate));
+}
+
+function updateDiamondPackagePrices() {
+  document.querySelectorAll("[data-diamonds]").forEach((button) => {
+    const amount = Number(button.dataset.diamonds);
+    const priceElement = button
+      .closest(".diamond-card")
+      ?.querySelector("[data-diamond-price]");
+
+    if (!Number.isInteger(amount) || !priceElement) return;
+
+    priceElement.textContent = `₦${calculateDiamondPrice(amount).toLocaleString()}`;
+  });
 }
 
 function appendOrderField(card, label, value) {
@@ -218,10 +412,21 @@ function createMarketplaceCard(listing, isFeatured = false) {
   // Chat button
   const button = document.createElement("button");
   button.type = "button";
-  button.textContent = "CHAT ADMIN TO BUY";
-  button.addEventListener("click", () => {
-    chatAdminForAccount(listing.title, listing.price);
-  });
+  button.textContent = isMarketplaceAvailable()
+    ? "CHAT ADMIN TO BUY"
+    : "MARKETPLACE UNAVAILABLE";
+  button.disabled = !isMarketplaceAvailable();
+
+  if (isMarketplaceAvailable()) {
+    button.addEventListener("click", () => {
+      chatAdminForAccount(listing.title, listing.price);
+    });
+  }
+
+  if (!siteSettings.marketplaceEnabled) {
+    button.classList.add("hidden");
+  }
+
   card.appendChild(button);
 
   return card;
@@ -470,6 +675,11 @@ function loadMarketplaceListings() {
 
   if (!marketplaceGrid) return;
 
+  if (!isMarketplaceAvailable()) {
+    applySiteSettings();
+    return;
+  }
+
   try {
     const listingsQuery = query(
       collection(db, "listings"),
@@ -688,6 +898,96 @@ window.rejectListing = async (listingId) => {
   }
 };
 
+function populateAdminSettingsForm() {
+  const diamondRateInput = document.getElementById("setting-diamond-rate");
+  const supportWhatsappInput = document.getElementById("setting-support-whatsapp");
+  const topupEnabledInput = document.getElementById("setting-topup-enabled");
+  const marketplaceEnabledInput = document.getElementById("setting-marketplace-enabled");
+  const maintenanceModeInput = document.getElementById("setting-maintenance-mode");
+
+  if (diamondRateInput) {
+    diamondRateInput.value = siteSettings.diamondRate;
+  }
+
+  if (supportWhatsappInput) {
+    supportWhatsappInput.value = siteSettings.supportWhatsapp;
+  }
+
+  if (topupEnabledInput) {
+    topupEnabledInput.checked = siteSettings.topupEnabled;
+  }
+
+  if (marketplaceEnabledInput) {
+    marketplaceEnabledInput.checked = siteSettings.marketplaceEnabled;
+  }
+
+  if (maintenanceModeInput) {
+    maintenanceModeInput.checked = siteSettings.maintenanceMode;
+  }
+}
+
+window.saveAdminSiteSettings = async () => {
+  await ensureSiteSettingsLoaded();
+
+  const user = auth.currentUser;
+
+  if (!user || !adminConfig.emails.includes(user.email.toLowerCase())) {
+    alert("Admin access required.");
+    return;
+  }
+
+  const diamondRate = Number(
+    document.getElementById("setting-diamond-rate")?.value
+  );
+  const supportWhatsapp = document
+    .getElementById("setting-support-whatsapp")
+    ?.value
+    .trim();
+
+  if (!Number.isFinite(diamondRate) || diamondRate <= 0) {
+    alert("Diamond rate must be a positive number.");
+    return;
+  }
+
+  if (!supportWhatsapp) {
+    alert("Support WhatsApp number is required.");
+    return;
+  }
+
+  const nextSettings = {
+    diamondRate,
+    supportWhatsapp,
+    topupEnabled: Boolean(
+      document.getElementById("setting-topup-enabled")?.checked
+    ),
+    marketplaceEnabled: Boolean(
+      document.getElementById("setting-marketplace-enabled")?.checked
+    ),
+    maintenanceMode: Boolean(
+      document.getElementById("setting-maintenance-mode")?.checked
+    ),
+    updatedAt: serverTimestamp(),
+    updatedBy: user.uid
+  };
+
+  try {
+    showToast("Saving site settings...");
+
+    await setDoc(doc(db, "settings", "config"), nextSettings, { merge: true });
+    await loadSiteSettings();
+    populateAdminSettingsForm();
+    showToast("Site settings saved ✅");
+  } catch (err) {
+    console.error("SAVE SITE SETTINGS ERROR:", err);
+    alert(
+      "Could not save site settings:\n\n" +
+      err.code +
+      "\n\n" +
+      err.message
+    );
+  }
+};
+
 async function loadAdminOrders() {
   const ordersList = document.getElementById("orders-list");
   const searchInput = document.getElementById("search-orders");
@@ -902,13 +1202,15 @@ function unlockTopupForUser(user) {
     diamonds.classList.remove("hidden");
   }
 
-  if (diamondGrid) {
+  if (diamondGrid && isTopupAvailable()) {
     diamondGrid.classList.remove("hidden");
   }
 
   if (loginRequiredBox) {
     loginRequiredBox.classList.add("hidden");
   }
+
+  applySiteSettings();
 }
 
 function lockTopupForGuest() {
@@ -927,9 +1229,12 @@ function lockTopupForGuest() {
   if (loginRequiredBox) {
     loginRequiredBox.classList.remove("hidden");
   }
+
+  applySiteSettings();
 }
 
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
+  await ensureSiteSettingsLoaded();
 
   const storeLink = document.getElementById("store-link");
   const heroLoginBtn = document.getElementById("hero-login-btn");
@@ -939,6 +1244,8 @@ onAuthStateChanged(auth, (user) => {
   const adminDashboard = document.getElementById("admin-dashboard");
   const adminDenied = document.getElementById("admin-denied");
   const adminLink = document.getElementById("admin-link");
+  const adminSettingsSection = document.getElementById("admin-settings-section");
+  const adminListingsSection = document.getElementById("admin-listings-section");
 
   const ordersLink = document.getElementById("orders-link");
   const historySection = document.getElementById("history-section");
@@ -994,7 +1301,7 @@ onAuthStateChanged(auth, (user) => {
       sellerFormBox.classList.remove("hidden");
     }
 
-    if (marketplaceGrid) {
+    if (marketplaceGrid && isMarketplaceAvailable()) {
       marketplaceGrid.classList.remove("hidden");
     }
 
@@ -1008,7 +1315,11 @@ onAuthStateChanged(auth, (user) => {
 
     unlockTopupForUser(user);
     loadUserOrders(user.uid);
-    loadMarketplaceListings(); // Load approved listings with search/filter support
+    if (isMarketplaceAvailable()) {
+      loadMarketplaceListings(); // Load approved listings with search/filter support
+    } else {
+      applySiteSettings();
+    }
 
     if (adminLink) {
       adminLink.style.display = isAdmin ? "inline-block" : "none";
@@ -1018,12 +1329,21 @@ onAuthStateChanged(auth, (user) => {
       adminDashboard.classList.toggle("hidden", !isAdmin);
     }
 
+    if (adminSettingsSection) {
+      adminSettingsSection.classList.toggle("hidden", !isAdmin);
+    }
+
+    if (adminListingsSection) {
+      adminListingsSection.classList.toggle("hidden", !isAdmin);
+    }
+
     if (adminDenied) {
       adminDenied.classList.toggle("hidden", isAdmin);
     }
 
     if (isAdmin) {
       showToast("Admin dashboard unlocked ✅");
+      populateAdminSettingsForm();
       loadAdminOrders();
       loadAdminListings();
     }
@@ -1079,6 +1399,14 @@ onAuthStateChanged(auth, (user) => {
       adminDashboard.classList.add("hidden");
     }
 
+    if (adminSettingsSection) {
+      adminSettingsSection.classList.add("hidden");
+    }
+
+    if (adminListingsSection) {
+      adminListingsSection.classList.add("hidden");
+    }
+
     if (adminDenied) {
       adminDenied.classList.remove("hidden");
     }
@@ -1099,7 +1427,19 @@ onAuthStateChanged(auth, (user) => {
   }
 });
 
-window.openOrderModal = (item, price) => {
+window.openOrderModal = async (item, price) => {
+  await ensureSiteSettingsLoaded();
+
+  if (!isTopupAvailable()) {
+    alert(
+      siteSettings.maintenanceMode
+        ? "Ordering is disabled during maintenance."
+        : "Diamond Top-up is temporarily unavailable."
+    );
+    applySiteSettings();
+    return;
+  }
+
   const user = auth.currentUser;
 
   if (!user) {
@@ -1150,6 +1490,20 @@ window.closeModal = () => {
   }
 };
 
+window.openDiamondPackageOrder = async (button) => {
+  await ensureSiteSettingsLoaded();
+
+  const amount = Number(button?.dataset?.diamonds);
+  const item = button?.dataset?.item || `${amount} Diamonds`;
+
+  if (!Number.isInteger(amount) || amount <= 0) {
+    alert("Invalid diamond package ⚡");
+    return;
+  }
+
+  openOrderModal(item, calculateDiamondPrice(amount));
+};
+
 window.copyAccountNumber = async () => {
   try {
     await navigator.clipboard.writeText(adminConfig.accountNumber);
@@ -1164,6 +1518,19 @@ window.generateOrderId = () => {
 };
 
 window.completeOrder = async () => {
+  await ensureSiteSettingsLoaded();
+
+  if (!isTopupAvailable()) {
+    alert(
+      siteSettings.maintenanceMode
+        ? "Ordering is disabled during maintenance."
+        : "Diamond Top-up is temporarily unavailable."
+    );
+    closeModal();
+    applySiteSettings();
+    return;
+  }
+
   const uid = document.getElementById("uid").value.trim();
   const email = document.getElementById("email").value.trim();
 
@@ -1239,7 +1606,19 @@ window.toggleMobileMenu = () => {
   }
 };
 
-window.submitCustomDiamond = () => {
+window.submitCustomDiamond = async () => {
+  await ensureSiteSettingsLoaded();
+
+  if (!isTopupAvailable()) {
+    alert(
+      siteSettings.maintenanceMode
+        ? "Custom top-up is disabled during maintenance."
+        : "Diamond Top-up is temporarily unavailable."
+    );
+    applySiteSettings();
+    return;
+  }
+
   const amountInput = document.getElementById("custom-diamond-amount");
   const rawAmount = amountInput.value.trim();
 
@@ -1260,7 +1639,7 @@ window.submitCustomDiamond = () => {
     return;
   }
 
-  const estimatedPrice = Math.round(amount * 15);
+  const estimatedPrice = calculateDiamondPrice(amount);
 
   openOrderModal(
     `${amount} Custom Diamonds`,
@@ -1288,7 +1667,19 @@ window.addEventListener("scroll", () => {
   }
 });
 
-window.chatAdminForAccount = (accountName, price) => {
+window.chatAdminForAccount = async (accountName, price) => {
+  await ensureSiteSettingsLoaded();
+
+  if (!isMarketplaceAvailable()) {
+    alert(
+      siteSettings.maintenanceMode
+        ? "Purchases are disabled during maintenance."
+        : "Marketplace is temporarily unavailable."
+    );
+    applySiteSettings();
+    return;
+  }
+
   const user = auth.currentUser;
 
   if (!user) {
@@ -1315,12 +1706,24 @@ I want to buy this account. Please confirm availability.
 `;
 
   const whatsappURL =
-    `https://wa.me/${adminConfig.whatsappNumber}?text=${encodeURIComponent(message)}`;
+    `https://wa.me/${siteSettings.supportWhatsapp}?text=${encodeURIComponent(message)}`;
 
   window.open(whatsappURL, "_blank");
 };
 
 window.submitAccountListing = async () => {
+  await ensureSiteSettingsLoaded();
+
+  if (!isMarketplaceAvailable()) {
+    alert(
+      siteSettings.maintenanceMode
+        ? "Seller submissions are disabled during maintenance."
+        : "Marketplace is temporarily unavailable."
+    );
+    applySiteSettings();
+    return;
+  }
+
   const user = auth.currentUser;
 
   if (!user) {
