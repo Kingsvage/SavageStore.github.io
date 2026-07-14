@@ -509,6 +509,93 @@ function isPriceInRange(price, range) {
   return price >= min && price <= max;
 }
 
+let currentUserIsAdmin = false;
+
+async function checkAdminAccess(user) {
+  if (!user) {
+    return false;
+  }
+
+  try {
+    const adminSnap = await getDoc(doc(db, "admins", user.uid));
+
+    if (adminSnap.exists()) {
+      return true;
+    }
+  } catch (err) {
+    console.warn("ADMIN CHECK ERROR:", err);
+  }
+
+  return adminEmails.includes((user.email || "").toLowerCase());
+}
+
+function setText(element, value) {
+  if (element) {
+    element.textContent = value;
+  }
+}
+
+function appendOrderField(card, label, value) {
+  const paragraph = document.createElement("p");
+  const strong = document.createElement("strong");
+
+  strong.textContent = `${label}:`;
+  paragraph.append(strong, ` ${value}`);
+  card.appendChild(paragraph);
+}
+
+function createOrderCard(order, options = {}) {
+  const card = document.createElement("div");
+  const title = document.createElement("h3");
+  const price = Number(order.price || 0);
+
+  card.className = "order-card";
+  title.textContent = order.orderId || "No Order ID";
+  card.appendChild(title);
+
+  if (options.showCustomerDetails) {
+    appendOrderField(card, "Name", order.customerName || "N/A");
+    appendOrderField(card, "Email", order.customerEmail || "N/A");
+    appendOrderField(card, "UID", order.gameUID || "N/A");
+  }
+
+  appendOrderField(card, "Item", order.item || "N/A");
+  appendOrderField(card, "Price", `₦${price.toLocaleString()}`);
+  appendOrderField(card, "Status", order.status || "pending");
+
+  if (options.showStatusControl) {
+    const statusSelect = document.createElement("select");
+    const statuses = ["processing", "delivered", "failed"];
+
+    statusSelect.className = "status-select";
+
+    statuses.forEach((status) => {
+      const option = document.createElement("option");
+
+      option.value = status;
+      option.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+      option.selected = order.status === status;
+      statusSelect.appendChild(option);
+    });
+
+    statusSelect.addEventListener("change", () => {
+      updateOrderStatus(order.id, statusSelect.value);
+    });
+
+    card.appendChild(statusSelect);
+  }
+
+  if (options.showPaymentProof) {
+    appendOrderField(
+      card,
+      "Proof",
+      order.paymentProof || "No proof required yet"
+    );
+  }
+
+  return card;
+}
+
 window.scrollToSection = (id) => {
   const section = document.getElementById(id);
 
@@ -1353,6 +1440,8 @@ onAuthStateChanged(auth, async (user) => {
     });
 
   } else {
+
+    currentUserIsAdmin = false;
 
     if (storeLink) {
       storeLink.style.display = "none";
