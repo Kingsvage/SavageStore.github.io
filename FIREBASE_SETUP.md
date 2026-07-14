@@ -12,7 +12,7 @@ uses client-side UI checks, but real security must be enforced by Firestore.
 
 ## Add yourself as an admin
 
-The rules use an `/admins/{uid}` document to identify admins. The website now checks this same document for admin UI access, with the hard-coded admin email only as a fallback while you finish setup.
+The rules use an `/admins/{uid}` document to identify admins.
 
 1. Login to the site with your admin Gmail.
 2. In Firebase console, go to **Authentication** → **Users**.
