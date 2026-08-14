@@ -862,7 +862,8 @@ window.signInWithGoogle = async () => {
     window.showToast(`Welcome ${user.displayName} ⚡`);
 
     saveUser(user).catch((err) => {
-      console.error("SAVE USER ERROR:", err);
+      console.error("LOGIN SUCCESSFUL BUT PROFILE SAVE FAILED:", err);
+      showToast("Login successful, but profile save failed ⚠️");
     });
 
   } catch (err) {
@@ -1820,7 +1821,7 @@ onAuthStateChanged(auth, async (user) => {
   const heroCardBtn = document.getElementById("hero-card-btn");
 
   if (user) {
-    const loggedInEmail = user.email.toLowerCase();
+    const loggedInEmail = (user.email || "").toLowerCase();
     const isAdmin = adminConfig.emails.includes(loggedInEmail);
 
     if (storeLink) {
@@ -1837,7 +1838,7 @@ onAuthStateChanged(auth, async (user) => {
 
     if (navLoginBtn) {
       navLoginBtn.textContent = "LOGOUT";
-      navLoginBtn.onclick = logout;
+      navLoginBtn.onclick = window.logout;
     }
 
     if (emailInput) {
@@ -1908,7 +1909,7 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     saveUser(user).catch((err) => {
-      console.error("SAVE USER ERROR:", err);
+      console.error("LOGIN SUCCESSFUL BUT PROFILE SAVE FAILED:", err);
     });
 
   } else {
@@ -1953,7 +1954,7 @@ onAuthStateChanged(auth, async (user) => {
 
     if (navLoginBtn) {
       navLoginBtn.textContent = "LOGIN";
-      navLoginBtn.onclick = signInWithGoogle;
+      navLoginBtn.onclick = window.signInWithGoogle;
     }
 
     if (adminDashboard) {
@@ -1981,10 +1982,14 @@ onAuthStateChanged(auth, async (user) => {
 
     if (heroCardBtn) {
       heroCardBtn.textContent = "GET STARTED";
-      heroCardBtn.onclick = signInWithGoogle;
+      heroCardBtn.onclick = window.signInWithGoogle;
     }
 
     lockTopupForGuest();
+  }
+  } catch (err) {
+    console.error("AUTH STATE HANDLER ERROR:", err);
+    showToast("Login loaded, but some page features failed to update ⚠️");
   }
 });
 
