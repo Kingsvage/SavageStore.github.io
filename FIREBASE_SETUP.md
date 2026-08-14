@@ -12,7 +12,7 @@ uses client-side UI checks, but real security must be enforced by Firestore.
 
 ## Add yourself as an admin
 
-The rules use an `/admins/{uid}` document to identify admins. The website now checks this same document for admin UI access, with the hard-coded admin email only as a fallback while you finish setup.
+The rules use an `/admins/{uid}` document to identify admins.
 
 1. Login to the site with your admin Gmail.
 2. In Firebase console, go to **Authentication** → **Users**.
@@ -34,19 +34,3 @@ website users from creating or editing admin records.
 - Login as the admin Gmail and confirm the Admin dashboard loads orders.
 - Submit a top-up order as a customer and confirm it appears only for that customer.
 - Update an order status as admin and confirm non-admin users cannot update it.
-
-
-## Firestore Indexes
-
-The marketplace query reads approved listings with:
-
-- Collection: `listings`
-- Filter: `status == approved`
-- Sort: `createdAt` descending
-
-If Firebase shows an index error, create a composite index for the `listings` collection with:
-
-1. `status` — Ascending
-2. `createdAt` — Descending
-
-Firebase usually provides a direct index creation link in the browser console error.

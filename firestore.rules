@@ -22,16 +22,23 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /settings/{settingId} {
+      allow read: if settingId == "config";
+      allow write: if settingId == "config" &&
+        isAdmin() &&
+        request.resource.data.diamondRate is number &&
+        request.resource.data.diamondRate > 0 &&
+        request.resource.data.topupEnabled is bool &&
+        request.resource.data.marketplaceEnabled is bool &&
+        request.resource.data.maintenanceMode is bool &&
+        request.resource.data.supportWhatsapp is string;
+    }
+
     match /users/{userId} {
       allow create, update: if isOwner(userId) &&
         request.resource.data.uid == request.auth.uid;
       allow read: if isOwner(userId) || isAdmin();
       allow delete: if false;
-    }
-
-    match /settings/{settingsId} {
-      allow read: if true;
-      allow write: if isAdmin();
     }
 
     match /orders/{orderId} {
@@ -57,8 +64,11 @@ service cloud.firestore {
         request.resource.data.price is number &&
         request.resource.data.price > 0;
 
-      allow read: if isAdmin() ||
-        (signedIn() && resource.data.status == 'approved');
+      // Allow signed-in users to read ALL listings (both pending and approved)
+      allow read: if signedIn();
+
+      // Allow reading approved listings for marketplace display
+      allow list: if signedIn();
 
       allow update, delete: if isAdmin();
     }
