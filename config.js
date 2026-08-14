@@ -16,7 +16,7 @@ export const firebaseConfig = {
 
 // Email.js Configuration
 export const emailConfig = {
-  serviceId: "service_oabtkuc",
+  serviceId: "service_3ut8kuo",
   templateId: "template_jeabwaa",
   publicKey: "VGMXshIsMZlghPhDW"
 };

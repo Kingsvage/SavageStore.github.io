@@ -923,9 +923,12 @@ async function sendCustomerConfirmationEmail(orderData) {
         price: Number(orderData.price).toLocaleString()
       }
     );
+
+    return true;
   } catch (err) {
     console.error("CUSTOMER EMAIL ERROR:", err);
     showToast("⚠️ Confirmation email could not be sent");
+    return false;
   }
 }
 
@@ -949,9 +952,12 @@ async function sendAdminOrderEmail(orderData) {
         price: Number(orderData.price).toLocaleString()
       }
     );
+
+    return true;
   } catch (err) {
     console.error("ADMIN EMAIL ERROR:", err);
     showToast("⚠️ Admin notification email could not be sent");
+    return false;
   }
 }
 
@@ -975,9 +981,12 @@ async function sendDeliveredReceiptEmail(orderData) {
         price: Number(orderData.price).toLocaleString()
       }
     );
+
+    return true;
   } catch (err) {
     console.error("DELIVERED EMAIL ERROR:", err);
     showToast("⚠️ Delivery receipt email could not be sent");
+    return false;
   }
 }
 
@@ -1636,6 +1645,11 @@ window.updateOrderStatus = async (orderDocId, newStatus) => {
     window.showToast("Updating order status...");
 
     const orderRef = doc(db, "orders", orderDocId);
+    const existingOrderSnap = await getDoc(orderRef);
+    const existingOrder = existingOrderSnap.exists()
+      ? existingOrderSnap.data()
+      : null;
+    const receiptAlreadySent = Boolean(existingOrder?.deliveryReceiptSent);
 
     await updateDoc(orderRef, {
       status: newStatus,
@@ -1644,11 +1658,24 @@ window.updateOrderStatus = async (orderDocId, newStatus) => {
 
     window.showToast(`Order marked as ${newStatus} ✅`);
 
-    if (newStatus === "delivered") {
+    if (newStatus === "delivered" && !receiptAlreadySent) {
       const orderSnap = await getDoc(orderRef);
 
       if (orderSnap.exists()) {
-        sendDeliveredReceiptEmail(orderSnap.data());
+        const deliveredEmailSent = await sendDeliveredReceiptEmail(orderSnap.data());
+
+        if (deliveredEmailSent) {
+          await updateDoc(orderRef, {
+            deliveryReceiptSent: true,
+            deliveryReceiptSentAt: serverTimestamp()
+          });
+
+          showToast("Delivered receipt sent ✅");
+        } else {
+          showToast("Order delivered, but receipt email could not be sent ⚠️");
+        }
+      } else {
+        showToast("Order delivered, but order data could not be found ⚠️");
       }
 
       window.showToast("Delivered receipt sent ✅");
@@ -2103,9 +2130,8 @@ window.completeOrder = async () => {
       createdAt: serverTimestamp()
     });
 
-    await sendCustomerConfirmationEmail(orderData);
-
-    await sendAdminOrderEmail(orderData);
+    const customerEmailSent = await sendCustomerConfirmationEmail(orderData);
+    const adminEmailSent = await sendAdminOrderEmail(orderData);
 
     window.closeModal();
 
