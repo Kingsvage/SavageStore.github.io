@@ -22,6 +22,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /settings/{settingId} {
+      allow read: if settingId == "config";
+      allow write: if settingId == "config" &&
+        isAdmin() &&
+        request.resource.data.diamondRate is number &&
+        request.resource.data.diamondRate > 0 &&
+        request.resource.data.topupEnabled is bool &&
+        request.resource.data.marketplaceEnabled is bool &&
+        request.resource.data.maintenanceMode is bool &&
+        request.resource.data.supportWhatsapp is string;
+    }
+
     match /users/{userId} {
       allow create, update: if isOwner(userId) &&
         request.resource.data.uid == request.auth.uid;

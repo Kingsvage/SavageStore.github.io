@@ -33,26 +33,286 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
-setPersistence(auth, browserLocalPersistence);
+const authPersistenceReady = setPersistence(auth, browserLocalPersistence)
+  .then(() => {
+    console.log("Auth persistence initialized");
+  })
+  .catch((err) => {
+    console.error("AUTH PERSISTENCE ERROR:", err);
+  });
 
 provider.setCustomParameters({
   prompt: "select_account"
 });
 
-emailjs.init(emailConfig.publicKey);
+const emailClient = window.emailjs || null;
+
+console.log("EmailJS loaded:", Boolean(emailClient));
+
+if (emailClient) {
+  emailClient.init(emailConfig.publicKey);
+  console.log("EmailJS initialized");
+} else {
+  console.warn("EmailJS SDK is unavailable; email notifications are disabled.");
+}
+
+async function sendEmail(emailName, templateParams) {
+  if (!emailClient) {
+    throw new Error("EmailJS SDK is unavailable");
+  }
+
+  console.log(`EmailJS sending: ${emailName}`, {
+    serviceId: emailConfig.serviceId,
+    templateId: emailConfig.templateId,
+    toEmail: templateParams.to_email
+  });
+
+  try {
+    const response = await emailClient.send(
+      emailConfig.serviceId,
+      emailConfig.templateId,
+      templateParams
+    );
+
+    console.log(`EmailJS success: ${emailName}`, {
+      status: response.status,
+      text: response.text
+    });
+
+    return response;
+  } catch (err) {
+    console.error(`EmailJS error: ${emailName}`, {
+      status: err.status,
+      text: err.text,
+      message: err.message
+    });
+
+    throw err;
+  }
+}
 
 let currentOrder = {
   item: "",
   price: 0
 };
 
+const DEFAULT_LISTING_IMAGE =
+  "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1200&auto=format&fit=crop";
+
+let siteSettings = {
+  diamondRate: 15,
+  topupEnabled: true,
+  marketplaceEnabled: true,
+  maintenanceMode: false,
+  supportWhatsapp: "2347120004769"
+};
+
 // Store all listings for filtering
 let allListings = [];
+
+function normalizeBoolean(value, fallback) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function normalizePositiveNumber(value, fallback) {
+  const numericValue = Number(value);
+
+  return Number.isFinite(numericValue) && numericValue > 0
+    ? numericValue
+    : fallback;
+}
+
+function normalizeString(value, fallback) {
+  return typeof value === "string" && value.trim()
+    ? value.trim()
+    : fallback;
+}
+
+async function loadSiteSettings() {
+  try {
+    const settingsSnap = await getDoc(doc(db, "settings", "config"));
+
+    if (settingsSnap.exists()) {
+      const data = settingsSnap.data();
+
+      siteSettings = {
+        ...siteSettings,
+        diamondRate: normalizePositiveNumber(
+          data.diamondRate,
+          siteSettings.diamondRate
+        ),
+        topupEnabled: normalizeBoolean(
+          data.topupEnabled,
+          siteSettings.topupEnabled
+        ),
+        marketplaceEnabled: normalizeBoolean(
+          data.marketplaceEnabled,
+          siteSettings.marketplaceEnabled
+        ),
+        maintenanceMode: normalizeBoolean(
+          data.maintenanceMode,
+          siteSettings.maintenanceMode
+        ),
+        supportWhatsapp: normalizeString(
+          data.supportWhatsapp,
+          siteSettings.supportWhatsapp
+        )
+      };
+    }
+
+    console.log("SITE SETTINGS LOADED:", siteSettings);
+  } catch (err) {
+    console.error("LOAD SITE SETTINGS ERROR:", err);
+  }
+
+  applySiteSettings();
+  return siteSettings;
+}
+
+const siteSettingsReady = loadSiteSettings();
 
 function setText(element, value) {
   if (element) {
     element.textContent = value;
   }
+}
+
+function isTopupAvailable() {
+  return !siteSettings.maintenanceMode && siteSettings.topupEnabled;
+}
+
+function isMarketplaceAvailable() {
+  return !siteSettings.maintenanceMode && siteSettings.marketplaceEnabled;
+}
+
+async function ensureSiteSettingsLoaded(timeoutMs = 3000) {
+  try {
+    await Promise.race([
+      siteSettingsReady,
+      new Promise((resolve) => {
+        setTimeout(resolve, timeoutMs);
+      })
+    ]);
+  } catch (err) {
+    console.error("SITE SETTINGS STARTUP ERROR:", err);
+  }
+}
+
+function upsertStatusMessage(id, message, anchorElement) {
+  if (!anchorElement) return;
+
+  let statusBox = document.getElementById(id);
+
+  if (!statusBox) {
+    statusBox = document.createElement("div");
+    statusBox.id = id;
+    statusBox.className = "login-required-box settings-status-box";
+    anchorElement.before(statusBox);
+  }
+
+  statusBox.textContent = message;
+  statusBox.classList.remove("hidden");
+}
+
+function hideStatusMessage(id) {
+  const statusBox = document.getElementById(id);
+
+  if (statusBox) {
+    statusBox.classList.add("hidden");
+  }
+}
+
+function applySiteSettings() {
+  const maintenanceBannerId = "maintenance-banner";
+  let maintenanceBanner = document.getElementById(maintenanceBannerId);
+
+  if (siteSettings.maintenanceMode) {
+    if (!maintenanceBanner) {
+      maintenanceBanner = document.createElement("div");
+      maintenanceBanner.id = maintenanceBannerId;
+      maintenanceBanner.className = "maintenance-banner";
+      document.body.prepend(maintenanceBanner);
+    }
+
+    maintenanceBanner.textContent =
+      "Savage Store is currently in maintenance mode. Orders, purchases, and seller submissions are disabled.";
+  } else if (maintenanceBanner) {
+    maintenanceBanner.remove();
+  }
+
+  const diamondGrid = document.getElementById("diamond-grid");
+  const customDiamondBox = document.querySelector(".custom-diamond-box");
+  const topupLoginBox = document.getElementById("login-required-box");
+
+  if (!isTopupAvailable()) {
+    if (diamondGrid) {
+      diamondGrid.classList.add("hidden");
+    }
+
+    if (customDiamondBox) {
+      customDiamondBox.classList.add("hidden");
+    }
+
+    if (topupLoginBox) {
+      topupLoginBox.classList.add("hidden");
+    }
+
+    upsertStatusMessage(
+      "topup-settings-status",
+      siteSettings.maintenanceMode
+        ? "Diamond Top-up is unavailable during maintenance."
+        : "Diamond Top-up is temporarily unavailable.",
+      diamondGrid || customDiamondBox
+    );
+  } else {
+    hideStatusMessage("topup-settings-status");
+
+    if (customDiamondBox) {
+      customDiamondBox.classList.remove("hidden");
+    }
+  }
+
+  updateDiamondPackagePrices();
+
+  const marketplaceGrid = document.getElementById("marketplace-grid");
+  const featuredSection = document.getElementById("featured-section");
+  const marketplaceControls = document.getElementById("marketplace-controls");
+  const marketplaceLoginBox = document.getElementById("marketplace-login-box");
+
+  if (!isMarketplaceAvailable()) {
+    [marketplaceGrid, featuredSection, marketplaceControls, marketplaceLoginBox].forEach((element) => {
+      if (element) {
+        element.classList.add("hidden");
+      }
+    });
+
+    upsertStatusMessage(
+      "marketplace-settings-status",
+      siteSettings.maintenanceMode
+        ? "Marketplace is unavailable during maintenance."
+        : "Marketplace is temporarily unavailable.",
+      marketplaceGrid || featuredSection || marketplaceControls
+    );
+  } else {
+    hideStatusMessage("marketplace-settings-status");
+  }
+}
+
+function calculateDiamondPrice(amount) {
+  return Math.round(amount * Number(siteSettings.diamondRate));
+}
+
+function updateDiamondPackagePrices() {
+  document.querySelectorAll("[data-diamonds]").forEach((button) => {
+    const amount = Number(button.dataset.diamonds);
+    const priceElement = button
+      .closest(".diamond-card")
+      ?.querySelector("[data-diamond-price]");
+
+    if (!Number.isInteger(amount) || !priceElement) return;
+
+    priceElement.textContent = `₦${calculateDiamondPrice(amount).toLocaleString()}`;
+  });
 }
 
 function appendOrderField(card, label, value) {
@@ -62,6 +322,42 @@ function appendOrderField(card, label, value) {
   strong.textContent = `${label}:`;
   paragraph.append(strong, ` ${value}`);
   card.appendChild(paragraph);
+}
+
+function getValidImageUrl(url) {
+  const value = (url || "").trim();
+
+  if (!value) {
+    return "";
+  }
+
+  try {
+    const parsedUrl = new URL(value);
+
+    if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
+      return parsedUrl.href;
+    }
+  } catch (err) {
+    console.warn("Invalid listing image URL ignored:", value);
+  }
+
+  return "";
+}
+
+function createListingImage(listing, className) {
+  const img = document.createElement("img");
+  const imageUrl = getValidImageUrl(listing.image1);
+
+  img.src = imageUrl || DEFAULT_LISTING_IMAGE;
+  img.alt = listing.title
+    ? `${listing.title} account screenshot`
+    : "Account screenshot";
+
+  if (className) {
+    img.className = className;
+  }
+
+  return img;
 }
 
 function createOrderCard(order, options = {}) {
@@ -127,11 +423,7 @@ function createMarketplaceCard(listing, isFeatured = false) {
   badge.textContent = isFeatured ? "⭐ FEATURED" : "VERIFIED";
   card.appendChild(badge);
 
-  // Placeholder image
-  const img = document.createElement("img");
-  img.src = "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1200&auto=format&fit=crop";
-  img.alt = listing.title;
-  card.appendChild(img);
+  card.appendChild(createListingImage(listing, "listing-image"));
 
   // Title
   const title = document.createElement("h3");
@@ -163,10 +455,21 @@ function createMarketplaceCard(listing, isFeatured = false) {
   // Chat button
   const button = document.createElement("button");
   button.type = "button";
-  button.textContent = "CHAT ADMIN TO BUY";
-  button.addEventListener("click", () => {
-    chatAdminForAccount(listing.title, listing.price);
-  });
+  button.textContent = isMarketplaceAvailable()
+    ? "CHAT ADMIN TO BUY"
+    : "MARKETPLACE UNAVAILABLE";
+  button.disabled = !isMarketplaceAvailable();
+
+  if (isMarketplaceAvailable()) {
+    button.addEventListener("click", () => {
+      chatAdminForAccount(listing.title, listing.price);
+    });
+  }
+
+  if (!siteSettings.marketplaceEnabled) {
+    button.classList.add("hidden");
+  }
+
   card.appendChild(button);
 
   return card;
@@ -183,10 +486,10 @@ function renderMarketplaceListings() {
   const filtered = allListings.filter((listing) => {
     const matchesSearch =
       !searchTerm ||
-      listing.title.toLowerCase().includes(searchTerm) ||
-      listing.sellerName.toLowerCase().includes(searchTerm) ||
-      listing.region.toLowerCase().includes(searchTerm) ||
-      listing.description.toLowerCase().includes(searchTerm);
+      (listing.title || "").toLowerCase().includes(searchTerm) ||
+      (listing.sellerName || "").toLowerCase().includes(searchTerm) ||
+      (listing.region || "").toLowerCase().includes(searchTerm) ||
+      (listing.description || "").toLowerCase().includes(searchTerm);
 
     const matchesRegion = !regionFilter || listing.region === regionFilter;
 
@@ -292,6 +595,7 @@ async function saveUser(user) {
 window.signInWithGoogle = async () => {
   try {
     showToast("Opening Google login...");
+    await authPersistenceReady;
 
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
@@ -299,7 +603,8 @@ window.signInWithGoogle = async () => {
     showToast(`Welcome ${user.displayName} ⚡`);
 
     saveUser(user).catch((err) => {
-      console.error("SAVE USER ERROR:", err);
+      console.error("LOGIN SUCCESSFUL BUT PROFILE SAVE FAILED:", err);
+      showToast("Login successful, but profile save failed ⚠️");
     });
 
   } catch (err) {
@@ -332,9 +637,8 @@ window.logout = async () => {
 
 async function sendCustomerConfirmationEmail(orderData) {
   try {
-    await emailjs.send(
-      emailConfig.serviceId,
-      emailConfig.templateId,
+    await sendEmail(
+      "customer order confirmation",
       {
         to_email: orderData.customerEmail,
         user_email: orderData.customerEmail,
@@ -352,17 +656,19 @@ async function sendCustomerConfirmationEmail(orderData) {
         price: Number(orderData.price).toLocaleString()
       }
     );
+
+    return true;
   } catch (err) {
     console.error("CUSTOMER EMAIL ERROR:", err);
     showToast("⚠️ Confirmation email could not be sent");
+    return false;
   }
 }
 
 async function sendAdminOrderEmail(orderData) {
   try {
-    await emailjs.send(
-      emailConfig.serviceId,
-      emailConfig.templateId,
+    await sendEmail(
+      "admin new-order notification",
       {
         to_email: adminConfig.emails[0],
         user_email: adminConfig.emails[0],
@@ -380,17 +686,23 @@ async function sendAdminOrderEmail(orderData) {
         price: Number(orderData.price).toLocaleString()
       }
     );
+
+    return true;
   } catch (err) {
     console.error("ADMIN EMAIL ERROR:", err);
     showToast("⚠️ Admin notification email could not be sent");
+    return false;
   }
 }
 
 async function sendDeliveredReceiptEmail(orderData) {
   try {
-    await emailjs.send(
-      emailConfig.serviceId,
-      emailConfig.templateId,
+    if (!orderData.customerEmail) {
+      throw new Error("Order is missing customerEmail");
+    }
+
+    await sendEmail(
+      "customer delivered receipt",
       {
         to_email: orderData.customerEmail,
         user_email: orderData.customerEmail,
@@ -408,9 +720,12 @@ async function sendDeliveredReceiptEmail(orderData) {
         price: Number(orderData.price).toLocaleString()
       }
     );
+
+    return true;
   } catch (err) {
     console.error("DELIVERED EMAIL ERROR:", err);
     showToast("⚠️ Delivery receipt email could not be sent");
+    return false;
   }
 }
 
@@ -421,11 +736,15 @@ function loadMarketplaceListings() {
 
   if (!marketplaceGrid) return;
 
+  if (!isMarketplaceAvailable()) {
+    applySiteSettings();
+    return;
+  }
+
   try {
     const listingsQuery = query(
       collection(db, "listings"),
-      where("status", "==", "approved"),
-      orderBy("approvedAt", "desc")
+      where("status", "==", "approved")
     );
 
     const unsubscribe = onSnapshot(listingsQuery, (snapshot) => {
@@ -438,6 +757,13 @@ function loadMarketplaceListings() {
           id: docSnap.id,
           ...docSnap.data()
         });
+      });
+
+      allListings.sort((firstListing, secondListing) => {
+        const firstApprovedAt = firstListing.approvedAt?.toMillis?.() || 0;
+        const secondApprovedAt = secondListing.approvedAt?.toMillis?.() || 0;
+
+        return secondApprovedAt - firstApprovedAt;
       });
 
       // Show controls and sections
@@ -550,6 +876,10 @@ async function loadAdminListings() {
       title.textContent = listing.title;
       card.appendChild(title);
 
+      if (getValidImageUrl(listing.image1)) {
+        card.appendChild(createListingImage(listing, "admin-listing-image"));
+      }
+
       const fields = [
         { label: "Seller", value: listing.sellerName },
         { label: "Email", value: listing.sellerEmail },
@@ -626,6 +956,96 @@ window.rejectListing = async (listingId) => {
   } catch (err) {
     console.error("REJECT LISTING ERROR:", err);
     showToast("⚠️ Failed to reject listing");
+  }
+};
+
+function populateAdminSettingsForm() {
+  const diamondRateInput = document.getElementById("setting-diamond-rate");
+  const supportWhatsappInput = document.getElementById("setting-support-whatsapp");
+  const topupEnabledInput = document.getElementById("setting-topup-enabled");
+  const marketplaceEnabledInput = document.getElementById("setting-marketplace-enabled");
+  const maintenanceModeInput = document.getElementById("setting-maintenance-mode");
+
+  if (diamondRateInput) {
+    diamondRateInput.value = siteSettings.diamondRate;
+  }
+
+  if (supportWhatsappInput) {
+    supportWhatsappInput.value = siteSettings.supportWhatsapp;
+  }
+
+  if (topupEnabledInput) {
+    topupEnabledInput.checked = siteSettings.topupEnabled;
+  }
+
+  if (marketplaceEnabledInput) {
+    marketplaceEnabledInput.checked = siteSettings.marketplaceEnabled;
+  }
+
+  if (maintenanceModeInput) {
+    maintenanceModeInput.checked = siteSettings.maintenanceMode;
+  }
+}
+
+window.saveAdminSiteSettings = async () => {
+  await ensureSiteSettingsLoaded();
+
+  const user = auth.currentUser;
+
+  if (!user || !adminConfig.emails.includes(user.email.toLowerCase())) {
+    alert("Admin access required.");
+    return;
+  }
+
+  const diamondRate = Number(
+    document.getElementById("setting-diamond-rate")?.value
+  );
+  const supportWhatsapp = document
+    .getElementById("setting-support-whatsapp")
+    ?.value
+    .trim();
+
+  if (!Number.isFinite(diamondRate) || diamondRate <= 0) {
+    alert("Diamond rate must be a positive number.");
+    return;
+  }
+
+  if (!supportWhatsapp) {
+    alert("Support WhatsApp number is required.");
+    return;
+  }
+
+  const nextSettings = {
+    diamondRate,
+    supportWhatsapp,
+    topupEnabled: Boolean(
+      document.getElementById("setting-topup-enabled")?.checked
+    ),
+    marketplaceEnabled: Boolean(
+      document.getElementById("setting-marketplace-enabled")?.checked
+    ),
+    maintenanceMode: Boolean(
+      document.getElementById("setting-maintenance-mode")?.checked
+    ),
+    updatedAt: serverTimestamp(),
+    updatedBy: user.uid
+  };
+
+  try {
+    showToast("Saving site settings...");
+
+    await setDoc(doc(db, "settings", "config"), nextSettings, { merge: true });
+    await loadSiteSettings();
+    populateAdminSettingsForm();
+    showToast("Site settings saved ✅");
+  } catch (err) {
+    console.error("SAVE SITE SETTINGS ERROR:", err);
+    alert(
+      "Could not save site settings:\n\n" +
+      err.code +
+      "\n\n" +
+      err.message
+    );
   }
 };
 
@@ -745,6 +1165,11 @@ window.updateOrderStatus = async (orderDocId, newStatus) => {
     showToast("Updating order status...");
 
     const orderRef = doc(db, "orders", orderDocId);
+    const existingOrderSnap = await getDoc(orderRef);
+    const existingOrder = existingOrderSnap.exists()
+      ? existingOrderSnap.data()
+      : null;
+    const receiptAlreadySent = Boolean(existingOrder?.deliveryReceiptSent);
 
     await updateDoc(orderRef, {
       status: newStatus,
@@ -753,14 +1178,27 @@ window.updateOrderStatus = async (orderDocId, newStatus) => {
 
     showToast(`Order marked as ${newStatus} ✅`);
 
-    if (newStatus === "delivered") {
+    if (newStatus === "delivered" && !receiptAlreadySent) {
       const orderSnap = await getDoc(orderRef);
 
       if (orderSnap.exists()) {
-        sendDeliveredReceiptEmail(orderSnap.data());
-      }
+        const deliveredEmailSent = await sendDeliveredReceiptEmail(orderSnap.data());
 
-      showToast("Delivered receipt sent ✅");
+        if (deliveredEmailSent) {
+          await updateDoc(orderRef, {
+            deliveryReceiptSent: true,
+            deliveryReceiptSentAt: serverTimestamp()
+          });
+
+          showToast("Delivered receipt sent ✅");
+        } else {
+          showToast("Order delivered, but receipt email could not be sent ⚠️");
+        }
+      } else {
+        showToast("Order delivered, but order data could not be found ⚠️");
+      }
+    } else if (newStatus === "delivered" && receiptAlreadySent) {
+      showToast("Order delivered. Receipt was already sent earlier ✅");
     }
 
     loadAdminOrders();
@@ -843,13 +1281,15 @@ function unlockTopupForUser(user) {
     diamonds.classList.remove("hidden");
   }
 
-  if (diamondGrid) {
+  if (diamondGrid && isTopupAvailable()) {
     diamondGrid.classList.remove("hidden");
   }
 
   if (loginRequiredBox) {
     loginRequiredBox.classList.add("hidden");
   }
+
+  applySiteSettings();
 }
 
 function lockTopupForGuest() {
@@ -868,9 +1308,14 @@ function lockTopupForGuest() {
   if (loginRequiredBox) {
     loginRequiredBox.classList.remove("hidden");
   }
+
+  applySiteSettings();
 }
 
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
+  try {
+    console.log("AUTH STATE CHANGED:", user ? "signed-in" : "signed-out");
+    await ensureSiteSettingsLoaded();
 
   const storeLink = document.getElementById("store-link");
   const heroLoginBtn = document.getElementById("hero-login-btn");
@@ -880,6 +1325,8 @@ onAuthStateChanged(auth, (user) => {
   const adminDashboard = document.getElementById("admin-dashboard");
   const adminDenied = document.getElementById("admin-denied");
   const adminLink = document.getElementById("admin-link");
+  const adminSettingsSection = document.getElementById("admin-settings-section");
+  const adminListingsSection = document.getElementById("admin-listings-section");
 
   const ordersLink = document.getElementById("orders-link");
   const historySection = document.getElementById("history-section");
@@ -895,7 +1342,7 @@ onAuthStateChanged(auth, (user) => {
   const heroCardBtn = document.getElementById("hero-card-btn");
 
   if (user) {
-    const loggedInEmail = user.email.toLowerCase();
+    const loggedInEmail = (user.email || "").toLowerCase();
     const isAdmin = adminConfig.emails.includes(loggedInEmail);
 
     if (storeLink) {
@@ -912,7 +1359,7 @@ onAuthStateChanged(auth, (user) => {
 
     if (navLoginBtn) {
       navLoginBtn.textContent = "LOGOUT";
-      navLoginBtn.onclick = logout;
+      navLoginBtn.onclick = window.logout;
     }
 
     if (emailInput) {
@@ -935,7 +1382,7 @@ onAuthStateChanged(auth, (user) => {
       sellerFormBox.classList.remove("hidden");
     }
 
-    if (marketplaceGrid) {
+    if (marketplaceGrid && isMarketplaceAvailable()) {
       marketplaceGrid.classList.remove("hidden");
     }
 
@@ -949,7 +1396,11 @@ onAuthStateChanged(auth, (user) => {
 
     unlockTopupForUser(user);
     loadUserOrders(user.uid);
-    loadMarketplaceListings(); // Load approved listings with search/filter support
+    if (isMarketplaceAvailable()) {
+      loadMarketplaceListings(); // Load approved listings with search/filter support
+    } else {
+      applySiteSettings();
+    }
 
     if (adminLink) {
       adminLink.style.display = isAdmin ? "inline-block" : "none";
@@ -959,18 +1410,27 @@ onAuthStateChanged(auth, (user) => {
       adminDashboard.classList.toggle("hidden", !isAdmin);
     }
 
+    if (adminSettingsSection) {
+      adminSettingsSection.classList.toggle("hidden", !isAdmin);
+    }
+
+    if (adminListingsSection) {
+      adminListingsSection.classList.toggle("hidden", !isAdmin);
+    }
+
     if (adminDenied) {
       adminDenied.classList.toggle("hidden", isAdmin);
     }
 
     if (isAdmin) {
       showToast("Admin dashboard unlocked ✅");
+      populateAdminSettingsForm();
       loadAdminOrders();
       loadAdminListings();
     }
 
     saveUser(user).catch((err) => {
-      console.error("SAVE USER ERROR:", err);
+      console.error("LOGIN SUCCESSFUL BUT PROFILE SAVE FAILED:", err);
     });
 
   } else {
@@ -1013,11 +1473,19 @@ onAuthStateChanged(auth, (user) => {
 
     if (navLoginBtn) {
       navLoginBtn.textContent = "LOGIN";
-      navLoginBtn.onclick = signInWithGoogle;
+      navLoginBtn.onclick = window.signInWithGoogle;
     }
 
     if (adminDashboard) {
       adminDashboard.classList.add("hidden");
+    }
+
+    if (adminSettingsSection) {
+      adminSettingsSection.classList.add("hidden");
+    }
+
+    if (adminListingsSection) {
+      adminListingsSection.classList.add("hidden");
     }
 
     if (adminDenied) {
@@ -1033,14 +1501,30 @@ onAuthStateChanged(auth, (user) => {
 
     if (heroCardBtn) {
       heroCardBtn.textContent = "GET STARTED";
-      heroCardBtn.onclick = signInWithGoogle;
+      heroCardBtn.onclick = window.signInWithGoogle;
     }
 
     lockTopupForGuest();
   }
+  } catch (err) {
+    console.error("AUTH STATE HANDLER ERROR:", err);
+    showToast("Login loaded, but some page features failed to update ⚠️");
+  }
 });
 
-window.openOrderModal = (item, price) => {
+window.openOrderModal = async (item, price) => {
+  await ensureSiteSettingsLoaded();
+
+  if (!isTopupAvailable()) {
+    alert(
+      siteSettings.maintenanceMode
+        ? "Ordering is disabled during maintenance."
+        : "Diamond Top-up is temporarily unavailable."
+    );
+    applySiteSettings();
+    return;
+  }
+
   const user = auth.currentUser;
 
   if (!user) {
@@ -1091,6 +1575,20 @@ window.closeModal = () => {
   }
 };
 
+window.openDiamondPackageOrder = async (button) => {
+  await ensureSiteSettingsLoaded();
+
+  const amount = Number(button?.dataset?.diamonds);
+  const item = button?.dataset?.item || `${amount} Diamonds`;
+
+  if (!Number.isInteger(amount) || amount <= 0) {
+    alert("Invalid diamond package ⚡");
+    return;
+  }
+
+  openOrderModal(item, calculateDiamondPrice(amount));
+};
+
 window.copyAccountNumber = async () => {
   try {
     await navigator.clipboard.writeText(adminConfig.accountNumber);
@@ -1105,6 +1603,19 @@ window.generateOrderId = () => {
 };
 
 window.completeOrder = async () => {
+  await ensureSiteSettingsLoaded();
+
+  if (!isTopupAvailable()) {
+    alert(
+      siteSettings.maintenanceMode
+        ? "Ordering is disabled during maintenance."
+        : "Diamond Top-up is temporarily unavailable."
+    );
+    closeModal();
+    applySiteSettings();
+    return;
+  }
+
   const uid = document.getElementById("uid").value.trim();
   const email = document.getElementById("email").value.trim();
 
@@ -1143,16 +1654,21 @@ window.completeOrder = async () => {
       createdAt: serverTimestamp()
     });
 
-    await sendCustomerConfirmationEmail(orderData);
-
-    await sendAdminOrderEmail(orderData);
+    const customerEmailSent = await sendCustomerConfirmationEmail(orderData);
+    const adminEmailSent = await sendAdminOrderEmail(orderData);
 
     closeModal();
 
     document.getElementById("uid").value = "";
     document.getElementById("email").value = user.email;
 
-    showToast(`Order submitted successfully ⚡ Order ID: ${orderId}`);
+    if (customerEmailSent && adminEmailSent) {
+      showToast(`Order submitted successfully ⚡ Order ID: ${orderId}`);
+    } else {
+      showToast(
+        `Order submitted successfully ⚡ Order ID: ${orderId}. Email notification could not be sent.`
+      );
+    }
 
     loadUserOrders(user.uid);
 
@@ -1180,7 +1696,19 @@ window.toggleMobileMenu = () => {
   }
 };
 
-window.submitCustomDiamond = () => {
+window.submitCustomDiamond = async () => {
+  await ensureSiteSettingsLoaded();
+
+  if (!isTopupAvailable()) {
+    alert(
+      siteSettings.maintenanceMode
+        ? "Custom top-up is disabled during maintenance."
+        : "Diamond Top-up is temporarily unavailable."
+    );
+    applySiteSettings();
+    return;
+  }
+
   const amountInput = document.getElementById("custom-diamond-amount");
   const rawAmount = amountInput.value.trim();
 
@@ -1201,7 +1729,7 @@ window.submitCustomDiamond = () => {
     return;
   }
 
-  const estimatedPrice = Math.round(amount * 15);
+  const estimatedPrice = calculateDiamondPrice(amount);
 
   openOrderModal(
     `${amount} Custom Diamonds`,
@@ -1229,7 +1757,19 @@ window.addEventListener("scroll", () => {
   }
 });
 
-window.chatAdminForAccount = (accountName, price) => {
+window.chatAdminForAccount = async (accountName, price) => {
+  await ensureSiteSettingsLoaded();
+
+  if (!isMarketplaceAvailable()) {
+    alert(
+      siteSettings.maintenanceMode
+        ? "Purchases are disabled during maintenance."
+        : "Marketplace is temporarily unavailable."
+    );
+    applySiteSettings();
+    return;
+  }
+
   const user = auth.currentUser;
 
   if (!user) {
@@ -1256,12 +1796,24 @@ I want to buy this account. Please confirm availability.
 `;
 
   const whatsappURL =
-    `https://wa.me/${adminConfig.whatsappNumber}?text=${encodeURIComponent(message)}`;
+    `https://wa.me/${siteSettings.supportWhatsapp}?text=${encodeURIComponent(message)}`;
 
   window.open(whatsappURL, "_blank");
 };
 
 window.submitAccountListing = async () => {
+  await ensureSiteSettingsLoaded();
+
+  if (!isMarketplaceAvailable()) {
+    alert(
+      siteSettings.maintenanceMode
+        ? "Seller submissions are disabled during maintenance."
+        : "Marketplace is temporarily unavailable."
+    );
+    applySiteSettings();
+    return;
+  }
+
   const user = auth.currentUser;
 
   if (!user) {
@@ -1275,6 +1827,9 @@ window.submitAccountListing = async () => {
   const level = document.getElementById("seller-level").value.trim();
   const rank = document.getElementById("seller-rank").value.trim();
   const description = document.getElementById("seller-description").value.trim();
+  const image1 = getValidImageUrl(document.getElementById("seller-image-1").value);
+  const image2 = getValidImageUrl(document.getElementById("seller-image-2").value);
+  const image3 = getValidImageUrl(document.getElementById("seller-image-3").value);
   const contact = document.getElementById("seller-contact").value.trim();
 
   if (!title || !region || !price || !level || !rank || !description || !contact) {
@@ -1302,28 +1857,35 @@ window.submitAccountListing = async () => {
       level,
       rank,
       description,
+      image1,
+      image2,
+      image3,
       contact,
       status: "pending-review",
       createdAt: serverTimestamp()
     });
 
-    await emailjs.send(
-      emailConfig.serviceId,
-      emailConfig.templateId,
-      {
-        to_email: adminConfig.emails[0],
-        user_email: adminConfig.emails[0],
-        email: adminConfig.emails[0],
-        reply_to: user.email,
-        to_name: "Savage Store Admin",
-        customer_name: user.displayName,
-        order_item: `NEW ACCOUNT LISTING: ${title}`,
-        item: title,
-        uid: rank,
-        currency_symbol: "₦",
-        price: numericPrice.toLocaleString()
-      }
-    );
+    try {
+      await sendEmail(
+        "admin account-listing notification",
+        {
+          to_email: adminConfig.emails[0],
+          user_email: adminConfig.emails[0],
+          email: adminConfig.emails[0],
+          reply_to: user.email,
+          to_name: "Savage Store Admin",
+          customer_name: user.displayName,
+          order_item: `NEW ACCOUNT LISTING: ${title}`,
+          item: title,
+          uid: rank,
+          currency_symbol: "₦",
+          price: numericPrice.toLocaleString()
+        }
+      );
+    } catch (err) {
+      console.error("LISTING EMAIL ERROR:", err);
+      showToast("⚠️ Listing saved, but admin email could not be sent");
+    }
 
     document.getElementById("seller-account-title").value = "";
     document.getElementById("seller-region").value = "";
@@ -1331,6 +1893,9 @@ window.submitAccountListing = async () => {
     document.getElementById("seller-level").value = "";
     document.getElementById("seller-rank").value = "";
     document.getElementById("seller-description").value = "";
+    document.getElementById("seller-image-1").value = "";
+    document.getElementById("seller-image-2").value = "";
+    document.getElementById("seller-image-3").value = "";
     document.getElementById("seller-contact").value = "";
 
     showToast("Listing submitted for admin review ✅");
