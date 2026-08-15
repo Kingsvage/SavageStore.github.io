@@ -1558,19 +1558,19 @@ async function loadAdminOrders() {
     const totalRevenue = document.getElementById("total-revenue");
     const pendingOrders = document.getElementById("pending-orders");
 
-    setText(totalOrders, orders.length);
+    setElementText(totalOrders, orders.length);
 
     const revenue = orders.reduce((sum, order) => {
       return sum + Number(order.price || 0);
     }, 0);
 
-    setText(totalRevenue, `₦${revenue.toLocaleString()}`);
+    setElementText(totalRevenue, `₦${revenue.toLocaleString()}`);
 
     const pending = orders.filter((order) => {
       return order.status === "processing";
     }).length;
 
-    setText(pendingOrders, pending);
+    setElementText(pendingOrders, pending);
 
     function renderOrders() {
       const search = searchInput ? searchInput.value.toLowerCase() : "";
@@ -1845,8 +1845,8 @@ onAuthStateChanged(auth, async (user) => {
       emailInput.value = user.email;
     }
 
-    setText(heroCardMessage, "Diamond packages are unlocked.");
-    setText(heroCardStatus, "Ready to Top Up");
+    setElementText(heroCardMessage, "Diamond packages are unlocked.");
+    setElementText(heroCardStatus, "Ready to Top Up");
 
     if (heroCardBtn) {
       heroCardBtn.textContent = "VIEW PACKAGES";
@@ -1977,8 +1977,8 @@ onAuthStateChanged(auth, async (user) => {
       adminLink.style.display = "none";
     }
 
-    setText(heroCardMessage, "Login to unlock diamond packages.");
-    setText(heroCardStatus, "Login Required");
+    setElementText(heroCardMessage, "Login to unlock diamond packages.");
+    setElementText(heroCardStatus, "Login Required");
 
     if (heroCardBtn) {
       heroCardBtn.textContent = "GET STARTED";
