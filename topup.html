@@ -21,7 +21,7 @@
     rel="stylesheet"
   >
 
-  <link rel="stylesheet" href="style.css?v=31">
+  <link rel="stylesheet" href="style.css?v=49">
 
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>
@@ -187,11 +187,13 @@
 
         <h3>100 Diamonds</h3>
 
-        <p class="price">₦1,600</p>
+        <p class="price" data-diamond-price>₦1,600</p>
 
         <button
           type="button"
-          onclick="openOrderModal('100 Diamonds',1600)"
+          data-diamonds="100"
+          data-item="100 Diamonds"
+          onclick="openDiamondPackageOrder(this)"
         >
           BUY NOW
         </button>
@@ -205,11 +207,13 @@
 
         <h3>210 Diamonds</h3>
 
-        <p class="price">₦3,200</p>
+        <p class="price" data-diamond-price>₦3,200</p>
 
         <button
           type="button"
-          onclick="openOrderModal('210 Diamonds',3200)"
+          data-diamonds="210"
+          data-item="210 Diamonds"
+          onclick="openDiamondPackageOrder(this)"
         >
           BUY NOW
         </button>
@@ -225,11 +229,13 @@
 
         <h3>530 Diamonds</h3>
 
-        <p class="price">₦7,900</p>
+        <p class="price" data-diamond-price>₦7,900</p>
 
         <button
           type="button"
-          onclick="openOrderModal('530 Diamonds',7900)"
+          data-diamonds="530"
+          data-item="530 Diamonds"
+          onclick="openDiamondPackageOrder(this)"
         >
           BUY NOW
         </button>
@@ -243,11 +249,13 @@
 
         <h3>1080 Diamonds</h3>
 
-        <p class="price">₦15,900</p>
+        <p class="price" data-diamond-price>₦15,900</p>
 
         <button
           type="button"
-          onclick="openOrderModal('1080 Diamonds',15900)"
+          data-diamonds="1080"
+          data-item="1080 Diamonds"
+          onclick="openDiamondPackageOrder(this)"
         >
           BUY NOW
         </button>
@@ -263,11 +271,13 @@
 
         <h3>2200 Diamonds</h3>
 
-        <p class="price">₦31,500</p>
+        <p class="price" data-diamond-price>₦31,500</p>
 
         <button
           type="button"
-          onclick="openOrderModal('2200 Diamonds',31500)"
+          data-diamonds="2200"
+          data-item="2200 Diamonds"
+          onclick="openDiamondPackageOrder(this)"
         >
           BUY NOW
         </button>
@@ -410,7 +420,7 @@
 
   <div class="toast hidden" id="toast"></div>
 
-  <script type="module" src="./script.js?v=51"></script>
+  <script type="module" src="./script.js?v=59"></script>
 
 </body>
 </html>

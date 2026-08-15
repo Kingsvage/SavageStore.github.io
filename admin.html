@@ -16,7 +16,7 @@
     rel="stylesheet"
   >
 
-  <link rel="stylesheet" href="style.css?v=40">
+  <link rel="stylesheet" href="style.css?v=49">
 
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>
@@ -134,7 +134,57 @@
 
   </section>
 
-  <section class="admin-section">
+  <section class="admin-section hidden" id="admin-settings-section">
+
+    <div class="section-title">
+      <span>SITE SETTINGS</span>
+      <h2>LIVE CONFIGURATION</h2>
+    </div>
+
+    <div class="settings-form">
+      <label for="setting-diamond-rate">Diamond rate (₦ per diamond)</label>
+      <input
+        type="number"
+        id="setting-diamond-rate"
+        min="1"
+        step="1"
+        placeholder="15"
+      >
+
+      <label for="setting-support-whatsapp">Support WhatsApp number</label>
+      <input
+        type="text"
+        id="setting-support-whatsapp"
+        placeholder="2347120004769"
+      >
+
+      <label class="settings-toggle">
+        <input type="checkbox" id="setting-topup-enabled">
+        <span>Diamond Top-up Enabled</span>
+      </label>
+
+      <label class="settings-toggle">
+        <input type="checkbox" id="setting-marketplace-enabled">
+        <span>Marketplace Enabled</span>
+      </label>
+
+      <label class="settings-toggle danger-toggle">
+        <input type="checkbox" id="setting-maintenance-mode">
+        <span>Maintenance Mode</span>
+      </label>
+
+      <button
+        type="button"
+        class="primary-btn full-btn"
+        onclick="saveAdminSiteSettings()"
+      >
+        SAVE SITE SETTINGS ⚙️
+      </button>
+    </div>
+
+  </section>
+
+  <section class="admin-section hidden" id="admin-listings-section">
 
   <h2>Pending Account Listings</h2>
 
@@ -187,7 +237,7 @@
 
   <div class="toast hidden" id="toast"></div>
 
-  <script type="module" src="./script.js?v=51"></script>
+  <script type="module" src="./script.js?v=59"></script>
 
 </body>
 </html>
