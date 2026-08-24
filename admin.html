@@ -116,7 +116,7 @@
       <input
         type="text"
         id="search-orders"
-        placeholder="Search Order ID / Email / UID"
+        placeholder="Search Order ID / Email / UID / Account"
       >
 
       <select id="status-filter">
@@ -124,6 +124,12 @@
         <option value="processing">Processing</option>
         <option value="delivered">Delivered</option>
         <option value="failed">Failed</option>
+      </select>
+
+      <select id="order-type-filter">
+        <option value="all">All Types</option>
+        <option value="topup">Top-up Orders</option>
+        <option value="account-purchase">Account Purchases</option>
       </select>
 
     </div>
@@ -137,7 +143,7 @@
       <h2>LISTING APPROVALS</h2>
     </div>
 
-    <div id="listings-list" class="orders-list">
+    <div id="admin-listings-list" class="orders-list">
       <p>Loading listings...</p>
     </div>
 
@@ -193,17 +199,7 @@
 
   </section>
 
-  <section class="admin-section hidden" id="admin-listings-section">
-
-  <h2>Pending Account Listings</h2>
-
-  <div id="listings-list">
-
-    <p>Loading listings...</p>
-
-  </div>
-
-</section>
+  <section class="admin-section hidden" id="admin-listings-section"></section>
 
   <section class="admin-section" id="admin-denied">
 
@@ -246,7 +242,7 @@
 
   <div class="toast hidden" id="toast"></div>
 
-  <script type="module" src="./script.js?v=54"></script>
+  <script type="module" src="./script.js?v=55"></script>
 
 </body>
 </html>

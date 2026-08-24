@@ -1127,3 +1127,74 @@ input:focus{
 .platform-section{
   background:#080808;
 }
+
+/* PHASE 2 MARKETPLACE */
+.account-modal-box{
+  max-width:720px;
+  max-height:90vh;
+  overflow:auto;
+}
+
+.listing-gallery{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:14px;
+  margin:18px 0;
+}
+
+.listing-gallery .listing-image{
+  height:180px;
+  margin-bottom:0;
+}
+
+.account-detail-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:12px;
+  margin:18px 0;
+}
+
+.account-detail-grid p,
+.summary-box p{
+  color:var(--muted);
+  margin:0;
+}
+
+.account-detail-grid strong,
+.summary-box strong{
+  color:#fff;
+}
+
+.seller-status-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:18px;
+  margin-bottom:28px;
+}
+
+.danger-btn{
+  padding:14px 20px;
+  border:none;
+  border-radius:14px;
+  background:linear-gradient(90deg,#ff2d55,#ff6b6b);
+  color:#fff;
+  font-family:'Orbitron',sans-serif;
+  cursor:pointer;
+}
+
+button:disabled,
+.primary-btn:disabled,
+.secondary-btn:disabled,
+.danger-btn:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+
+.market-card p{
+  color:var(--muted);
+  line-height:1.6;
+}
+
+.marketplace-controls select{
+  min-width:180px;
+}
