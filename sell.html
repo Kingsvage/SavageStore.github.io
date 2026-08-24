@@ -148,24 +148,6 @@
 
       <input
         type="text"
-        id="seller-image-1"
-        placeholder="Screenshot URL 1"
-      >
-
-      <input
-        type="text"
-        id="seller-image-2"
-        placeholder="Screenshot URL 2"
-      >
-
-      <input
-        type="text"
-        id="seller-image-3"
-        placeholder="Screenshot URL 3"
-      >
-
-      <input
-        type="text"
         id="seller-contact"
         placeholder="Your WhatsApp number"
       >
@@ -212,6 +194,24 @@
 
   </section>
 
+  <section class="features-section hidden" id="seller-dashboard-section">
+    <div class="section-title">
+      <span>SELLER DASHBOARD</span>
+      <h2>MY LISTINGS</h2>
+    </div>
+
+    <div class="seller-status-grid" id="seller-listing-summary">
+      <div class="analytics-card"><h3>0</h3><p>Pending Review</p></div>
+      <div class="analytics-card"><h3>0</h3><p>Approved</p></div>
+      <div class="analytics-card"><h3>0</h3><p>Sold</p></div>
+      <div class="analytics-card"><h3>0</h3><p>Rejected</p></div>
+    </div>
+
+    <div id="seller-listings-list" class="orders-list">
+      <p>Submit a listing to see it here.</p>
+    </div>
+  </section>
+
   <footer>
 
     <img
@@ -229,7 +229,7 @@
 
   <div class="toast hidden" id="toast"></div>
 
-  <script type="module" src="./script.js?v=54"></script>
+  <script type="module" src="./script.js?v=55"></script>
 
 </body>
 </html>
