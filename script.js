@@ -85,6 +85,18 @@ let siteSettings = {
   ...defaultSiteSettings
 };
 
+const defaultSiteSettings = {
+  diamondRate: 15,
+  topupEnabled: true,
+  marketplaceEnabled: true,
+  maintenanceMode: false,
+  supportWhatsapp: "2347120004769"
+};
+
+let siteSettings = {
+  ...defaultSiteSettings
+};
+
 function normalizeBoolean(value, fallback) {
   return typeof value === "boolean" ? value : fallback;
 }
@@ -776,189 +788,6 @@ function populateAdminSettingsForm() {
   const topupEnabledInput = document.getElementById("setting-topup-enabled");
   const marketplaceEnabledInput = document.getElementById("setting-marketplace-enabled");
   const maintenanceModeInput = document.getElementById("setting-maintenance-mode");
-
-  if (diamondRateInput) {
-    diamondRateInput.value = siteSettings.diamondRate;
-  }
-
-  if (supportWhatsappInput) {
-    supportWhatsappInput.value = siteSettings.supportWhatsapp;
-  }
-
-  if (topupEnabledInput) {
-    topupEnabledInput.checked = siteSettings.topupEnabled;
-  }
-
-  if (marketplaceEnabledInput) {
-    marketplaceEnabledInput.checked = siteSettings.marketplaceEnabled;
-  }
-
-  if (maintenanceModeInput) {
-    maintenanceModeInput.checked = siteSettings.maintenanceMode;
-  }
-}
-
-window.saveAdminSiteSettings = async () => {
-  await ensureSiteSettingsLoaded();
-
-  const user = auth.currentUser;
-
-  if (!user || !(await checkAdminAccess(user))) {
-    alert("Admin access required.");
-    return;
-  }
-
-  const diamondRate = Number(
-    document.getElementById("setting-diamond-rate")?.value
-  );
-  const supportWhatsapp = document
-    .getElementById("setting-support-whatsapp")
-    ?.value
-    .trim();
-
-  if (!Number.isFinite(diamondRate) || diamondRate <= 0) {
-    alert("Diamond rate must be a positive number.");
-    return;
-  }
-
-  if (!supportWhatsapp) {
-    alert("Support WhatsApp number is required.");
-    return;
-  }
-
-  const nextSettings = {
-    diamondRate,
-    supportWhatsapp,
-    topupEnabled: Boolean(
-      document.getElementById("setting-topup-enabled")?.checked
-    ),
-    marketplaceEnabled: Boolean(
-      document.getElementById("setting-marketplace-enabled")?.checked
-    ),
-    maintenanceMode: Boolean(
-      document.getElementById("setting-maintenance-mode")?.checked
-    ),
-    updatedAt: serverTimestamp(),
-    updatedBy: user.uid
-  };
-
-  try {
-    showToast("Saving site settings...");
-
-    await setDoc(doc(db, "settings", "config"), nextSettings, { merge: true });
-    await loadSiteSettings();
-    populateAdminSettingsForm();
-    showToast("Site settings saved ✅");
-  } catch (err) {
-    console.error("SAVE SITE SETTINGS ERROR:", err);
-    alert(
-      "Could not save site settings:\n\n" +
-      err.code +
-      "\n\n" +
-      err.message
-    );
-  }
-};
-
-async function loadMarketplaceListings() {
-  const marketplaceGrid = document.getElementById("marketplace-grid");
-  const marketplaceControls = document.getElementById("marketplace-controls");
-  const featuredSection = document.getElementById("featured-section");
-
-  if (!marketplaceGrid) return;
-
-  if (!isMarketplaceAvailable()) {
-    const disabledMessage = document.createElement("p");
-
-    disabledMessage.textContent = siteSettings.maintenanceMode
-      ? "Marketplace is currently under maintenance."
-      : "Marketplace is currently disabled.";
-    marketplaceGrid.replaceChildren(disabledMessage);
-    return;
-  }
-
-  try {
-    const listingsQuery = query(
-      collection(db, "listings"),
-      where("status", "==", "approved"),
-      orderBy("createdAt", "desc")
-    );
-
-    const snapshot = await getDocs(listingsQuery);
-
-    allListings = [];
-
-    snapshot.forEach((docSnap) => {
-      allListings.push({
-        id: docSnap.id,
-        ...docSnap.data()
-      });
-    });
-
-    marketplaceGrid.classList.remove("hidden");
-
-    if (marketplaceControls) {
-      marketplaceControls.classList.remove("hidden");
-    }
-
-    if (featuredSection) {
-      featuredSection.classList.remove("hidden");
-    }
-
-    renderMarketplaceListings();
-  } catch (err) {
-    console.error("LOAD MARKETPLACE LISTINGS ERROR:", err);
-    marketplaceGrid.replaceChildren();
-
-    const errorMessage = document.createElement("p");
-
-    errorMessage.textContent = "Could not load approved marketplace listings.";
-    marketplaceGrid.appendChild(errorMessage);
-    window.showToast("Could not load approved marketplace listings.");
-  }
-}
-
-function initializeMarketplaceControls() {
-  const searchInput = document.getElementById("marketplace-search");
-  const regionFilter = document.getElementById("region-filter");
-  const rankFilter = document.getElementById("rank-filter");
-  const priceFilter = document.getElementById("price-filter");
-  const sortFilter = document.getElementById("sort-filter");
-  const clearFiltersButton = document.getElementById("clear-filters");
-
-  [searchInput, regionFilter, rankFilter, priceFilter, sortFilter].forEach((control) => {
-    if (control) {
-      const eventName = control === searchInput ? "input" : "change";
-      control.addEventListener(eventName, renderMarketplaceListings);
-    }
-  });
-
-  if (clearFiltersButton) {
-    clearFiltersButton.addEventListener("click", () => {
-      if (searchInput) searchInput.value = "";
-      if (regionFilter) regionFilter.value = "";
-      if (rankFilter) rankFilter.value = "";
-      if (priceFilter) priceFilter.value = "";
-      if (sortFilter) sortFilter.value = "newest";
-      renderMarketplaceListings();
-      window.showToast("Filters cleared ✅");
-    });
-  }
-}
-
-
-window.viewAccountListing = (listingId) => {
-  const listing = getListingById(listingId);
-  const modal = document.getElementById("account-detail-modal");
-  const content = document.getElementById("account-detail-content");
-
-  if (!listing || !modal || !content) {
-    alert("Account listing could not be found.");
-    return;
-  }
-
-  selectedAccountListing = listing;
-  content.replaceChildren();
 
   const title = document.createElement("h2");
   const details = document.createElement("div");
@@ -1816,6 +1645,7 @@ onAuthStateChanged(auth, async (user) => {
   const heroCardBtn = document.getElementById("hero-card-btn");
 
   if (user) {
+    const loggedInEmail = (user.email || "").toLowerCase();
     const isAdmin = await checkAdminAccess(user);
     currentUserIsAdmin = isAdmin;
 
